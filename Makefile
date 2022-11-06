@@ -15,8 +15,8 @@ VERSION = ${E2E_IMAGE_TAG}
 SUFFIX = -test
 endif
 
-IMAGE_REGISTRY ?= docker.io
-IMAGE_REPO     ?= marekszkutnik
+IMAGE_REGISTRY ?= ghcr.io
+IMAGE_REPO     ?= kedacore
 
 IMAGE_CONTROLLER = $(IMAGE_REGISTRY)/$(IMAGE_REPO)/keda$(SUFFIX):$(VERSION)
 IMAGE_ADAPTER    = $(IMAGE_REGISTRY)/$(IMAGE_REPO)/keda-metrics-apiserver$(SUFFIX):$(VERSION)
