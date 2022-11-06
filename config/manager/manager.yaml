@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keda-operator
+  namespace: keda
+  labels:
+    app: keda-operator
+    app.kubernetes.io/name: keda-operator
+    app.kubernetes.io/version: latest
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: keda-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keda-operator
+  template:
+    metadata:
+      labels:
+        app: keda-operator
+        name: keda-operator
+      name: keda-operator
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: keda-operator
+      containers:
+        - name: keda-operator
+          image: ghcr.io/kedacore/keda:latest
+          command:
+            - /keda
+          args:
+            - --leader-elect
+            - --zap-log-level=info
+            - --zap-encoder=console
+            - --zap-time-encoding=rfc3339
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 1000m
+              memory: 1000Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 25
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 20
+          ports:
+          - containerPort: 8080
+            name: http
+            protocol: TCP
+          env:
+            - name: WATCH_NAMESPACE
+              value: ""
+            - name: KEDA_HTTP_DEFAULT_TIMEOUT
+              value: ""
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+      terminationGracePeriodSeconds: 10
+      nodeSelector:
+        kubernetes.io/os: linux
