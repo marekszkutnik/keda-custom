@@ -94,7 +94,7 @@ func NewPrometheusMulticriterialScaler(config *ScalerConfig) (Scaler, error) {
 
 	logger := InitializeLogger(config, "prometheus_scaler")
 
-	meta, err := parsePrometheusMetadata(config)
+	meta, err := parsePrometheusMulticriterialMetadata(config)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing prometheus metadata: %s", err)
 	}
