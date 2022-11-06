@@ -20,24 +20,26 @@ import (
 )
 
 const (
-	promServerAddress       = "serverAddress"
-	promMetricName          = "metricName"
-	promQueryParam1         = "queryParam1"
-	promQuery1              = "query1"
-	promQueryParam2         = "queryParam2"
-	promQuery2              = "query2"
-	promThreshold1          = "threshold1"
-	promThreshold2          = "threshold2"
-	promActivationThreshold = "activationThreshold"
-	promNamespace           = "namespace"
-	promCortexScopeOrgID    = "cortexOrgID"
-	promCortexHeaderKey     = "X-Scope-OrgID"
-	ignoreNullValues        = "ignoreNullValues"
-	unsafeSsl               = "unsafeSsl"
+	promMulticriterialServerAddress       = "serverAddress"
+	promMulticriterialMetricName          = "metricName"
+	promQueryParam1                       = "queryParam1"
+	promQuery1                            = "query1"
+	promQueryParam2                       = "queryParam2"
+	promQuery2                            = "query2"
+	promFullQuery                         = "fullQuery"
+	promThreshold1                        = "threshold1"
+	promThreshold2                        = "threshold2"
+	promTotalThreshold                    = "totalThreshold"
+	promMulticriterialActivationThreshold = "activationThreshold"
+	promMulticriterialNamespace           = "namespace"
+	promMulticriterialCortexScopeOrgID    = "cortexOrgID"
+	promMulticriterialCortexHeaderKey     = "X-Scope-OrgID"
+	promMulticriterialIgnoreNullValues    = "ignoreNullValues"
+	promMulticriterialunsafeSsl           = "unsafeSsl"
 )
 
 var (
-	defaultIgnoreNullValues = true
+	promMulticriterialdefaultIgnoreNullValues = true
 )
 
 type prometheusMulticriterialScaler struct {
@@ -50,9 +52,9 @@ type prometheusMulticriterialScaler struct {
 type prometheusMulticriterialMetadata struct {
 	serverAddress       string
 	metricName          string
-	queryParam1         string
+	queryParam1         float64
 	query1              string
-	queryParam2         string
+	queryParam2         float64
 	query2              string
 	fullQuery           string
 	threshold1          float64
@@ -71,7 +73,7 @@ type prometheusMulticriterialMetadata struct {
 	unsafeSsl        bool
 }
 
-type promQueryResult struct {
+type promMulticriterialQueryResult struct {
 	Status string `json:"status"`
 	Data   struct {
 		ResultType string `json:"resultType"`
@@ -118,17 +120,22 @@ func NewPrometheusMulticriterialScaler(config *ScalerConfig) (Scaler, error) {
 	}, nil
 }
 
-func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *prometheusMetadata, err error) {
-	meta = &prometheusMetadata{}
+func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *prometheusMulticriterialMetadata, err error) {
+	meta = &prometheusMulticriterialMetadata{}
 
-	if val, ok := config.TriggerMetadata[promServerAddress]; ok && val != "" {
+	if val, ok := config.TriggerMetadata[promMulticriterialServerAddress]; ok && val != "" {
 		meta.serverAddress = val
 	} else {
-		return nil, fmt.Errorf("no %s given", promServerAddress)
+		return nil, fmt.Errorf("no %s given", promMulticriterialServerAddress)
 	}
 
 	if val, ok := config.TriggerMetadata[promQueryParam1]; ok && val != "" {
-		meta.queryParam1 = val
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promQueryParam1, err)
+		}
+
+		meta.queryParam1 = t
 	} else {
 		return nil, fmt.Errorf("no %s given", promQueryParam1)
 	}
@@ -140,7 +147,12 @@ func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *promethe
 	}
 
 	if val, ok := config.TriggerMetadata[promQueryParam2]; ok && val != "" {
-		meta.queryParam1 = val
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promQueryParam2, err)
+		}
+
+		meta.queryParam2 = t
 	} else {
 		return nil, fmt.Errorf("no %s given", promQueryParam2)
 	}
@@ -151,10 +163,10 @@ func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *promethe
 		return nil, fmt.Errorf("no %s given", promQuery2)
 	}
 
-	if val, ok := config.TriggerMetadata[promMetricName]; ok && val != "" {
+	if val, ok := config.TriggerMetadata[promMulticriterialMetricName]; ok && val != "" {
 		meta.metricName = val
 	} else {
-		return nil, fmt.Errorf("no %s given", promMetricName)
+		return nil, fmt.Errorf("no %s given", promMulticriterialMetricName)
 	}
 
 	if val, ok := config.TriggerMetadata[promThreshold1]; ok && val != "" {
@@ -180,7 +192,7 @@ func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *promethe
 	}
 
 	meta.activationThreshold = 0
-	if val, ok := config.TriggerMetadata[promActivationThreshold]; ok {
+	if val, ok := config.TriggerMetadata[promMulticriterialActivationThreshold]; ok {
 		t, err := strconv.ParseFloat(val, 64)
 		if err != nil {
 			return nil, fmt.Errorf("activationThreshold parsing error %s", err.Error())
@@ -189,16 +201,16 @@ func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *promethe
 		meta.activationThreshold = t
 	}
 
-	if val, ok := config.TriggerMetadata[promNamespace]; ok && val != "" {
+	if val, ok := config.TriggerMetadata[promMulticriterialNamespace]; ok && val != "" {
 		meta.namespace = val
 	}
 
-	if val, ok := config.TriggerMetadata[promCortexScopeOrgID]; ok && val != "" {
+	if val, ok := config.TriggerMetadata[promMulticriterialCortexScopeOrgID]; ok && val != "" {
 		meta.cortexOrgID = val
 	}
 
-	meta.ignoreNullValues = defaultIgnoreNullValues
-	if val, ok := config.TriggerMetadata[ignoreNullValues]; ok && val != "" {
+	meta.ignoreNullValues = promMulticriterialdefaultIgnoreNullValues
+	if val, ok := config.TriggerMetadata[promMulticriterialIgnoreNullValues]; ok && val != "" {
 		ignoreNullValues, err := strconv.ParseBool(val)
 		if err != nil {
 			return nil, fmt.Errorf("err incorrect value for ignoreNullValues given: %s, "+
@@ -208,7 +220,7 @@ func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *promethe
 	}
 
 	meta.unsafeSsl = false
-	if val, ok := config.TriggerMetadata[unsafeSsl]; ok && val != "" {
+	if val, ok := config.TriggerMetadata[promMulticriterialunsafeSsl]; ok && val != "" {
 		unsafeSslValue, err := strconv.ParseBool(val)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing %s: %s", unsafeSsl, err)
@@ -244,7 +256,9 @@ func (s *prometheusMulticriterialScaler) Close(context.Context) error {
 
 func (s *prometheusMulticriterialScaler) GetMetricSpecForScaling(context.Context) []v2.MetricSpec {
 	metricName := kedautil.NormalizeString(fmt.Sprintf("prometheus-multicriterial-%s", s.metadata.metricName))
-	totalThreshold = s.metadata.queryParam1*s.metadata.threshold1 + s.metadata.queryParam2*s.metadata.threshold2
+
+	totalThreshold := s.metadata.queryParam1*s.metadata.threshold1 + s.metadata.queryParam2*s.metadata.threshold2
+
 	externalMetric := &v2.ExternalMetricSource{
 		Metric: v2.MetricIdentifier{
 			Name: GenerateMetricNameWithIndex(s.metadata.scalerIndex, metricName),
@@ -260,8 +274,11 @@ func (s *prometheusMulticriterialScaler) GetMetricSpecForScaling(context.Context
 func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (float64, error) {
 	t := time.Now().UTC().Format(time.RFC3339)
 
+	strQueryParam1 := strconv.FormatFloat(s.metadata.queryParam1, 'E', -1, 64)
+	strQueryParam2 := strconv.FormatFloat(s.metadata.queryParam2, 'E', -1, 64)
+
 	// fullQuery = "(" + s.metadata.queryParam1 + "*" + s.metadata.query1 + "+" + s.metadata.queryParam2 + "*" + s.metadata.query2 + ")" + " / " + "(" + s.metadata.queryParam1 + "+" + s.metadata.queryParam1 + ")"
-	fullQuery = "(" + s.metadata.queryParam1 + "*" + s.metadata.query1 + "+" + s.metadata.queryParam2 + "*" + s.metadata.query2 + ")"
+	fullQuery := strQueryParam1 + "*" + s.metadata.query1 + "+" + strQueryParam2 + "*" + s.metadata.query2
 
 	queryEscaped := url_pkg.QueryEscape(fullQuery)
 	url := fmt.Sprintf("%s/api/v1/query?query=%s&time=%s", s.metadata.serverAddress, queryEscaped, t)
@@ -283,7 +300,7 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 	}
 
 	if s.metadata.cortexOrgID != "" {
-		req.Header.Add(promCortexHeaderKey, s.metadata.cortexOrgID)
+		req.Header.Add(promMulticriterialCortexHeaderKey, s.metadata.cortexOrgID)
 	}
 
 	r, err := s.httpClient.Do(req)
@@ -303,7 +320,7 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 		return -1, err
 	}
 
-	var result promQueryResult
+	var result promMulticriterialQueryResult
 	err = json.Unmarshal(b, &result)
 	if err != nil {
 		return -1, err
@@ -318,7 +335,7 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 		}
 		return -1, fmt.Errorf("prometheus metrics %s target may be lost, the result is empty", s.metadata.metricName)
 	} else if len(result.Data.Result) > 1 {
-		return -1, fmt.Errorf("prometheus query %s returned multiple elements", s.metadata.query)
+		return -1, fmt.Errorf("prometheus query %s returned multiple elements", fullQuery)
 	}
 
 	valueLen := len(result.Data.Result[0].Value)
@@ -328,7 +345,7 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 		}
 		return -1, fmt.Errorf("prometheus metrics %s target may be lost, the value list is empty", s.metadata.metricName)
 	} else if valueLen < 2 {
-		return -1, fmt.Errorf("prometheus query %s didn't return enough values", s.metadata.query)
+		return -1, fmt.Errorf("prometheus query %s didn't return enough values", fullQuery)
 	}
 
 	val := result.Data.Result[0].Value[1]
