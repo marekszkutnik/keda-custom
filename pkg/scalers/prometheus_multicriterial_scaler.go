@@ -92,20 +92,20 @@ func NewPrometheusMulticriterialScaler(config *ScalerConfig) (Scaler, error) {
 		return nil, fmt.Errorf("error getting scaler metric type: %s", err)
 	}
 
-	logger := InitializeLogger(config, "prometheus_scaler")
+	logger := InitializeLogger(config, "prometheus_multicriterial_scaler")
 
-	metaPromMulti, err := parsePrometheusMetadata(config)
+	meta, err := parsePrometheusMulticriterialMetadata(config)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing prometheus metadata: %s", err)
 	}
 
-	httpClient := kedautil.CreateHTTPClient(config.GlobalHTTPTimeout, metaPromMulti.unsafeSsl)
+	httpClient := kedautil.CreateHTTPClient(config.GlobalHTTPTimeout, meta.unsafeSsl)
 
-	if metaPromMulti.prometheusAuth != nil && (metaPromMulti.prometheusAuth.CA != "" || metaPromMulti.prometheusAuth.EnableTLS) {
+	if meta.prometheusAuth != nil && (meta.prometheusAuth.CA != "" || meta.prometheusAuth.EnableTLS) {
 		// create http.RoundTripper with auth settings from ScalerConfig
 		if httpClient.Transport, err = authentication.CreateHTTPRoundTripper(
 			authentication.NetHTTP,
-			metaPromMulti.prometheusAuth,
+			meta.prometheusAuth,
 		); err != nil {
 			logger.V(1).Error(err, "init Prometheus client http transport")
 			return nil, err
@@ -114,7 +114,7 @@ func NewPrometheusMulticriterialScaler(config *ScalerConfig) (Scaler, error) {
 
 	return &prometheusScaler{
 		metricType: metricType,
-		metadata:   metaPromMulti,
+		metadata:   meta,
 		httpClient: httpClient,
 		logger:     logger,
 	}, nil
