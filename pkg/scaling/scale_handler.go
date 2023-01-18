@@ -446,8 +446,8 @@ func buildScaler(ctx context.Context, client client.Client, triggerType string, 
 		return scalers.NewPredictKubeScaler(ctx, config)
 	case "prometheus":
 		return scalers.NewPrometheusScaler(config)
-	case "prometheus-multi":
-		return scalers.NewPrometheusMulticriterialScaler(config)
+	case "prometheus-criterial-minkowski-norm":
+		return scalers.NewPrometheusMulticriterialMinkowskiScaler(config)
 	case "pulsar":
 		return scalers.NewPulsarScaler(config)
 	case "rabbitmq":
