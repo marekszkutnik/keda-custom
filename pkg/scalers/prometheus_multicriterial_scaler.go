@@ -17,6 +17,13 @@ import (
 
 	"github.com/kedacore/keda/v2/pkg/scalers/authentication"
 	kedautil "github.com/kedacore/keda/v2/pkg/util"
+	// goclient
+	// "bufio"
+	// "context"
+	// "fmt"
+	// "os"
+	// appsv1 "k8s.io/api/apps/v1"
+	// "k8s.io/client-go/util/retry"
 )
 
 const (
@@ -56,10 +63,8 @@ type prometheusMulticriterialMetadata struct {
 	query1              string
 	queryParam2         float64
 	query2              string
-	fullQuery           string
 	threshold1          float64
 	threshold2          float64
-	totalThreshold      float64
 	activationThreshold float64
 	prometheusAuth      *authentication.AuthMeta
 	namespace           string
@@ -85,8 +90,8 @@ type promMulticriterialQueryResult struct {
 	} `json:"data"`
 }
 
-// NewPrometheusMulticriterialScaler creates a new prometheusScaler
-func NewPrometheusMulticriterialScaler(config *ScalerConfig) (Scaler, error) {
+// NewPrometheusMulticriterialScaler creates a new prometheusMulticriterialScaler
+func NewPrometheusMulticriterialMinkowskiScaler(config *ScalerConfig) (Scaler, error) {
 	metricType, err := GetMetricTargetType(config)
 	if err != nil {
 		return nil, fmt.Errorf("error getting scaler metric type: %s", err)
@@ -96,7 +101,7 @@ func NewPrometheusMulticriterialScaler(config *ScalerConfig) (Scaler, error) {
 
 	meta, err := parsePrometheusMulticriterialMetadata(config)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing prometheus metadata: %s", err)
+		return nil, fmt.Errorf("error parsing prometheus multicriterial metadata: %s", err)
 	}
 
 	httpClient := kedautil.CreateHTTPClient(config.GlobalHTTPTimeout, meta.unsafeSsl)
@@ -112,7 +117,7 @@ func NewPrometheusMulticriterialScaler(config *ScalerConfig) (Scaler, error) {
 		}
 	}
 
-	return &prometheusScaler{
+	return &prometheusMulticriterialScaler{
 		metricType: metricType,
 		metadata:   meta,
 		httpClient: httpClient,
@@ -243,7 +248,7 @@ func parsePrometheusMulticriterialMetadata(config *ScalerConfig) (meta *promethe
 func (s *prometheusMulticriterialScaler) IsActive(ctx context.Context) (bool, error) {
 	val, err := s.ExecutePromQuery(ctx)
 	if err != nil {
-		s.logger.Error(err, "error executing prometheus query")
+		s.logger.Error(err, "error executing prometheus multicriterial query")
 		return false, err
 	}
 
@@ -315,8 +320,8 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 	_ = r.Body.Close()
 
 	if !(r.StatusCode >= 200 && r.StatusCode <= 299) {
-		err := fmt.Errorf("prometheus query api returned error. status: %d response: %s", r.StatusCode, string(b))
-		s.logger.Error(err, "prometheus query api returned error")
+		err := fmt.Errorf("prometheus multicriterial query api returned error. status: %d response: %s", r.StatusCode, string(b))
+		s.logger.Error(err, "prometheus multicriterial query api returned error")
 		return -1, err
 	}
 
@@ -333,9 +338,9 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 		if s.metadata.ignoreNullValues {
 			return 0, nil
 		}
-		return -1, fmt.Errorf("prometheus metrics %s target may be lost, the result is empty", s.metadata.metricName)
+		return -1, fmt.Errorf("prometheus multicriterial metrics %s target may be lost, the result is empty", s.metadata.metricName)
 	} else if len(result.Data.Result) > 1 {
-		return -1, fmt.Errorf("prometheus query %s returned multiple elements", fullQuery)
+		return -1, fmt.Errorf("prometheus multicriterial query %s returned multiple elements", fullQuery)
 	}
 
 	valueLen := len(result.Data.Result[0].Value)
@@ -343,9 +348,9 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 		if s.metadata.ignoreNullValues {
 			return 0, nil
 		}
-		return -1, fmt.Errorf("prometheus metrics %s target may be lost, the value list is empty", s.metadata.metricName)
+		return -1, fmt.Errorf("prometheus multicriterial metrics %s target may be lost, the value list is empty", s.metadata.metricName)
 	} else if valueLen < 2 {
-		return -1, fmt.Errorf("prometheus query %s didn't return enough values", fullQuery)
+		return -1, fmt.Errorf("prometheus multicriterial query %s didn't return enough values", fullQuery)
 	}
 
 	val := result.Data.Result[0].Value[1]
@@ -353,7 +358,7 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 		str := val.(string)
 		v, err = strconv.ParseFloat(str, 64)
 		if err != nil {
-			s.logger.Error(err, "Error converting prometheus value", "prometheus_value", str)
+			s.logger.Error(err, "Error converting prometheus multicriterial value", "prometheus_multicriterial_value", str)
 			return -1, err
 		}
 	}
@@ -364,7 +369,7 @@ func (s *prometheusMulticriterialScaler) ExecutePromQuery(ctx context.Context) (
 func (s *prometheusMulticriterialScaler) GetMetrics(ctx context.Context, metricName string, _ labels.Selector) ([]external_metrics.ExternalMetricValue, error) {
 	val, err := s.ExecutePromQuery(ctx)
 	if err != nil {
-		s.logger.Error(err, "error executing prometheus query")
+		s.logger.Error(err, "error executing prometheus multicriterial query")
 		return []external_metrics.ExternalMetricValue{}, err
 	}
 
@@ -372,3 +377,34 @@ func (s *prometheusMulticriterialScaler) GetMetrics(ctx context.Context, metricN
 
 	return append([]external_metrics.ExternalMetricValue{}, metric), nil
 }
+
+// func getCurrentReplicas() {
+// 	var kubeconfig *string
+// 	if home := homedir.HomeDir(); home != "" {
+// 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+// 	} else {
+// 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+// 	}
+// 	flag.Parse()
+
+// 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	clientset, err := kubernetes.NewForConfig(config)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+
+// 	deploymentsClient := clientset.AppsV1().Deployments(apiv1.NamespaceDefault)
+
+// 	fmt.Printf("Listing deployments in namespace %q:\n", apiv1.NamespaceDefault)
+// 	list, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{})
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	for _, d := range list.Items {
+// 		fmt.Printf(" * %s (%d replicas)\n", d.Name, *d.Spec.Replicas)
+// 	}
+
+// }
