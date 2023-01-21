@@ -27,20 +27,18 @@ import (
 )
 
 const (
-	promMinkowskiNormServerAddress = "serverAddress"
-	promMinkowskiNormMetricName    = "metricName"
-	promNumOfParams                = "numOfParams"
-	promQueryParam1                = "queryParam1"
-	promQuery1                     = "query1"
-	promQueryParam2                = "queryParam2"
-	promQuery2                     = "query2"
-	promQueryParam3                = "queryParam3"
-	promQuery3                     = "query3"
-	// promFullQuery                        = "fullQuery"
-	promThreshold1 = "threshold1"
-	promThreshold2 = "threshold2"
-	promThreshold3 = "threshold3"
-	// promTotalThreshold                   = "totalThreshold"
+	promMinkowskiNormServerAddress       = "serverAddress"
+	promMinkowskiNormMetricName          = "metricName"
+	promNumOfParams                      = "numOfParams"
+	promQueryParam1                      = "queryParam1"
+	promQuery1                           = "query1"
+	promQueryParam2                      = "queryParam2"
+	promQuery2                           = "query2"
+	promQueryParam3                      = "queryParam3"
+	promQuery3                           = "query3"
+	promThreshold1                       = "threshold1"
+	promThreshold2                       = "threshold2"
+	promThreshold3                       = "threshold3"
 	promMinkowskiNormActivationThreshold = "activationThreshold"
 	promMinkowskiNormNamespace           = "namespace"
 	promMinkowskiNormCortexScopeOrgID    = "cortexOrgID"
@@ -63,7 +61,7 @@ type prometheusMinkowskiNormScaler struct {
 type prometheusMinkowskiNormMetadata struct {
 	serverAddress       string
 	metricName          string
-	numOfParams         float64
+	numOfParams         int
 	queryParam1         float64
 	query1              string
 	queryParam2         float64
@@ -149,7 +147,7 @@ func parsePrometheusMinkowskiNormMetadata(config *ScalerConfig) (meta *prometheu
 	}
 
 	if val, ok := config.TriggerMetadata[promNumOfParams]; ok && val != "" {
-		t, err := strconv.ParseFloat(val, 64)
+		t, err := strconv.Atoi(val)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing %s: %s", promNumOfParams, err)
 		}
@@ -238,7 +236,7 @@ func parsePrometheusMinkowskiNormMetadata(config *ScalerConfig) (meta *prometheu
 			return nil, fmt.Errorf("error parsing %s: %s", promThreshold3, err)
 		}
 
-		meta.threshold2 = t
+		meta.threshold3 = t
 	} else {
 		return nil, fmt.Errorf("no %s given", promThreshold3)
 	}
@@ -309,7 +307,7 @@ func (s *prometheusMinkowskiNormScaler) Close(context.Context) error {
 func (s *prometheusMinkowskiNormScaler) GetMetricSpecForScaling(context.Context) []v2.MetricSpec {
 	metricName := kedautil.NormalizeString(fmt.Sprintf("prometheus-minkowski-norm-%s", s.metadata.metricName))
 
-	totalThreshold := 0.0
+	totalThreshold := 1.0
 	if s.metadata.numOfParams == 2 {
 		totalThreshold = s.metadata.queryParam1*s.metadata.threshold1 + s.metadata.queryParam2*s.metadata.threshold2
 	} else if s.metadata.numOfParams == 3 {
