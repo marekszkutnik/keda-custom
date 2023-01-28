@@ -307,18 +307,14 @@ func (s *prometheusMinkowskiNormScaler) Close(context.Context) error {
 func (s *prometheusMinkowskiNormScaler) GetMetricSpecForScaling(context.Context) []v2.MetricSpec {
 	metricName := kedautil.NormalizeString(fmt.Sprintf("prometheus-minkowski-norm-%s", s.metadata.metricName))
 
-	totalThreshold := 1.0
-	if s.metadata.numOfParams == 2 {
-		totalThreshold = s.metadata.queryParam1*s.metadata.threshold1 + s.metadata.queryParam2*s.metadata.threshold2
-	} else if s.metadata.numOfParams == 3 {
-		totalThreshold = s.metadata.queryParam1*s.metadata.threshold1 + s.metadata.queryParam2*s.metadata.threshold2 + s.metadata.queryParam3*s.metadata.threshold3
-	}
+	// desiredMetricValue := float64(s.metadata.numOfParams) * (s.metadata.queryParam1 + s.metadata.queryParam2 + s.metadata.queryParam3)
+	desiredMetricValue := s.metadata.queryParam1 + s.metadata.queryParam2 + s.metadata.queryParam3
 
 	externalMetric := &v2.ExternalMetricSource{
 		Metric: v2.MetricIdentifier{
 			Name: GenerateMetricNameWithIndex(s.metadata.scalerIndex, metricName),
 		},
-		Target: GetMetricTargetMili(s.metricType, totalThreshold),
+		Target: GetMetricTargetMili(s.metricType, desiredMetricValue),
 	}
 	metricSpec := v2.MetricSpec{
 		External: externalMetric, Type: externalMetricType,
@@ -333,15 +329,13 @@ func (s *prometheusMinkowskiNormScaler) ExecutePromQuery(ctx context.Context) (f
 	strQueryParam2 := strconv.FormatFloat(s.metadata.queryParam2, 'E', -1, 64)
 	strQueryParam3 := strconv.FormatFloat(s.metadata.queryParam3, 'E', -1, 64)
 
-	fullQuery := ""
-	// fullQuery = "(" + s.metadata.queryParam1 + "*" + s.metadata.query1 + "+" + s.metadata.queryParam2 + "*" + s.metadata.query2 + ")" + " / " + "(" + s.metadata.queryParam1 + "+" + s.metadata.queryParam1 + ")"
-	if s.metadata.numOfParams == 2 {
-		fullQuery = strQueryParam1 + "*" + s.metadata.query1 + "+" + strQueryParam2 + "*" + s.metadata.query2
-	} else if s.metadata.numOfParams == 3 {
-		fullQuery = strQueryParam1 + "*" + s.metadata.query1 + "+" + strQueryParam2 + "*" + s.metadata.query2 + "+" + strQueryParam3 + "*" + s.metadata.query3
-	}
+	strThreshold1 := strconv.FormatFloat(s.metadata.threshold1, 'E', -1, 64)
+	strThreshold2 := strconv.FormatFloat(s.metadata.threshold2, 'E', -1, 64)
+	strThreshold3 := strconv.FormatFloat(s.metadata.threshold3, 'E', -1, 64)
 
-	queryEscaped := url_pkg.QueryEscape(fullQuery)
+	currentMetricValue := strQueryParam1 + "*" + s.metadata.query1 + "/" + strThreshold1 + "+" + strQueryParam2 + "*" + s.metadata.query2 + "/" + strThreshold2 + "+" + strQueryParam3 + "*" + s.metadata.query3 + "/" + strThreshold3
+
+	queryEscaped := url_pkg.QueryEscape(currentMetricValue)
 	url := fmt.Sprintf("%s/api/v1/query?query=%s&time=%s", s.metadata.serverAddress, queryEscaped, t)
 
 	// set 'namespace' parameter for namespaced Prometheus requests (eg. for Thanos Querier)
@@ -396,7 +390,7 @@ func (s *prometheusMinkowskiNormScaler) ExecutePromQuery(ctx context.Context) (f
 		}
 		return -1, fmt.Errorf("prometheus minkowski norm metrics %s target may be lost, the result is empty", s.metadata.metricName)
 	} else if len(result.Data.Result) > 1 {
-		return -1, fmt.Errorf("prometheus minkowski norm query %s returned multiple elements", fullQuery)
+		return -1, fmt.Errorf("prometheus minkowski norm query %s returned multiple elements", currentMetricValue)
 	}
 
 	valueLen := len(result.Data.Result[0].Value)
@@ -406,7 +400,7 @@ func (s *prometheusMinkowskiNormScaler) ExecutePromQuery(ctx context.Context) (f
 		}
 		return -1, fmt.Errorf("prometheus minkowski norm metrics %s target may be lost, the value list is empty", s.metadata.metricName)
 	} else if valueLen < 2 {
-		return -1, fmt.Errorf("prometheus minkowski norm query %s didn't return enough values", fullQuery)
+		return -1, fmt.Errorf("prometheus minkowski norm query %s didn't return enough values", currentMetricValue)
 	}
 
 	val := result.Data.Result[0].Value[1]
