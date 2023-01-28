@@ -29,7 +29,6 @@ import (
 const (
 	promMinkowskiNormServerAddress       = "serverAddress"
 	promMinkowskiNormMetricName          = "metricName"
-	promNumOfParams                      = "numOfParams"
 	promQueryParam1                      = "queryParam1"
 	promQuery1                           = "query1"
 	promQueryParam2                      = "queryParam2"
@@ -61,7 +60,6 @@ type prometheusMinkowskiNormScaler struct {
 type prometheusMinkowskiNormMetadata struct {
 	serverAddress       string
 	metricName          string
-	numOfParams         int
 	queryParam1         float64
 	query1              string
 	queryParam2         float64
@@ -144,17 +142,6 @@ func parsePrometheusMinkowskiNormMetadata(config *ScalerConfig) (meta *prometheu
 		meta.metricName = val
 	} else {
 		return nil, fmt.Errorf("no %s given", promMinkowskiNormMetricName)
-	}
-
-	if val, ok := config.TriggerMetadata[promNumOfParams]; ok && val != "" {
-		t, err := strconv.Atoi(val)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing %s: %s", promNumOfParams, err)
-		}
-
-		meta.numOfParams = t
-	} else {
-		return nil, fmt.Errorf("no %s given", promNumOfParams)
 	}
 
 	if val, ok := config.TriggerMetadata[promQueryParam1]; ok && val != "" {
@@ -307,7 +294,6 @@ func (s *prometheusMinkowskiNormScaler) Close(context.Context) error {
 func (s *prometheusMinkowskiNormScaler) GetMetricSpecForScaling(context.Context) []v2.MetricSpec {
 	metricName := kedautil.NormalizeString(fmt.Sprintf("prometheus-minkowski-norm-%s", s.metadata.metricName))
 
-	// desiredMetricValue := float64(s.metadata.numOfParams) * (s.metadata.queryParam1 + s.metadata.queryParam2 + s.metadata.queryParam3)
 	desiredMetricValue := s.metadata.queryParam1 + s.metadata.queryParam2 + s.metadata.queryParam3
 
 	externalMetric := &v2.ExternalMetricSource{
