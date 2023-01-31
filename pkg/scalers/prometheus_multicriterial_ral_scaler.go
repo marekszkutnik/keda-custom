@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	url_pkg "net/url"
+	"sort"
 
 	"strconv"
 	"time"
@@ -18,13 +19,6 @@ import (
 
 	"github.com/kedacore/keda/v2/pkg/scalers/authentication"
 	kedautil "github.com/kedacore/keda/v2/pkg/util"
-	// goclient
-	// "bufio"
-	// "context"
-	// "fmt"
-	// "os"
-	// appsv1 "k8s.io/api/apps/v1"
-	// "k8s.io/client-go/util/retry"
 )
 
 const (
@@ -40,15 +34,56 @@ const (
 	promMulticriterialRalCortexHeaderKey     = "X-Scope-OrgID"
 	promMulticriterialRalIgnoreNullValues    = "ignoreNullValues"
 	promMulticriterialRalunsafeSsl           = "unsafeSsl"
+
+	// RAL algorithm profile
+	promMulticriterialRalReservationLevel1 = "reservationLevel1"
+	promMulticriterialRalAspirationLevel1  = "aspirationLevel1"
+	promMulticriterialRalReservationLevel2 = "reservationLevel2"
+	promMulticriterialRalAspirationLevel2  = "aspirationLevel2"
+	promMulticriterialRalReservationLevel3 = "reservationLevel3"
+	promMulticriterialRalAspirationLevel3  = "aspirationLevel3"
+
+	// RAL params for mormalize process
+	maxCPUPerPod = 2000.0
+	maxRAMPerPod = 400.0
+	maxLATPerPod = 10.0
 )
 
 var (
 	promMulticriterialRaldefaultIgnoreNullValues = true
 
-	// lastReplicasCount int32 = 1
-	defaultHPAMinReplicas float64 = 2.0
-	defaultHPAMaxReplicas float64 = 5.0
+	curentCPU = 9100.0
+	curentRAM = 1700.0
+	curentLAT = 43.0
+
+	CPUReservationPerPod = 1500.0
+	RAMReservationPerPod = 300.0
+	LATReservationPerPod = 8.0
+	CPUAspirationPerPod  = 200.0
+	RAMAspirationPerPod  = 100.0
+	LATAspirationPerPod  = 3.0
+
+	rp1 ReplicasProfile
+	rp2 ReplicasProfile
+	rp3 ReplicasProfile
+	rp4 ReplicasProfile
+	rp5 ReplicasProfile
+	rp6 ReplicasProfile
+	rp7 ReplicasProfile
+	rp8 ReplicasProfile
+
+	newReplicasNum int
 )
+
+type ReplicasProfile struct {
+	replicasNum    int
+	CPUReservation float64
+	CPUAspiration  float64
+	RAMReservation float64
+	RAMAspiration  float64
+	LATReservation float64
+	LATAspiration  float64
+}
 
 type prometheusMulticriterialRalScaler struct {
 	metricType v2.MetricTargetType
@@ -60,8 +95,14 @@ type prometheusMulticriterialRalScaler struct {
 type prometheusMulticriterialRalMetadata struct {
 	serverAddress       string
 	metricName          string
+	reservationLevel1   float64
+	aspirationLevel1    float64
 	query1              string
+	reservationLevel2   float64
+	aspirationLevel2    float64
 	query2              string
+	reservationLevel3   float64
+	aspirationLevel3    float64
 	query3              string
 	query4              string
 	activationThreshold float64
@@ -139,16 +180,82 @@ func parsePrometheusMulticriterialRalMetadata(config *ScalerConfig) (meta *prome
 		return nil, fmt.Errorf("no %s given", promMulticriterialRalMetricName)
 	}
 
+	if val, ok := config.TriggerMetadata[promMulticriterialRalReservationLevel1]; ok && val != "" {
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promMulticriterialRalReservationLevel1, err)
+		}
+
+		meta.reservationLevel1 = t
+	} else {
+		return nil, fmt.Errorf("no %s given", promMulticriterialRalReservationLevel1)
+	}
+
+	if val, ok := config.TriggerMetadata[promMulticriterialRalAspirationLevel1]; ok && val != "" {
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promMulticriterialRalAspirationLevel1, err)
+		}
+
+		meta.aspirationLevel1 = t
+	} else {
+		return nil, fmt.Errorf("no %s given", promMulticriterialRalAspirationLevel1)
+	}
+
 	if val, ok := config.TriggerMetadata[promMulticriterialQuery1]; ok && val != "" {
 		meta.query1 = val
 	} else {
 		return nil, fmt.Errorf("no %s given", promMulticriterialQuery1)
 	}
 
+	if val, ok := config.TriggerMetadata[promMulticriterialRalReservationLevel2]; ok && val != "" {
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promMulticriterialRalReservationLevel2, err)
+		}
+
+		meta.reservationLevel2 = t
+	} else {
+		return nil, fmt.Errorf("no %s given", promMulticriterialRalReservationLevel2)
+	}
+
+	if val, ok := config.TriggerMetadata[promMulticriterialRalAspirationLevel2]; ok && val != "" {
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promMulticriterialRalAspirationLevel2, err)
+		}
+
+		meta.aspirationLevel2 = t
+	} else {
+		return nil, fmt.Errorf("no %s given", promMulticriterialRalAspirationLevel2)
+	}
+
 	if val, ok := config.TriggerMetadata[promMulticriterialQuery2]; ok && val != "" {
 		meta.query2 = val
 	} else {
 		return nil, fmt.Errorf("no %s given", promMulticriterialQuery2)
+	}
+
+	if val, ok := config.TriggerMetadata[promMulticriterialRalReservationLevel3]; ok && val != "" {
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promMulticriterialRalReservationLevel3, err)
+		}
+
+		meta.reservationLevel3 = t
+	} else {
+		return nil, fmt.Errorf("no %s given", promMulticriterialRalReservationLevel3)
+	}
+
+	if val, ok := config.TriggerMetadata[promMulticriterialRalAspirationLevel3]; ok && val != "" {
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %s", promMulticriterialRalAspirationLevel3, err)
+		}
+
+		meta.aspirationLevel3 = t
+	} else {
+		return nil, fmt.Errorf("no %s given", promMulticriterialRalAspirationLevel3)
 	}
 
 	if val, ok := config.TriggerMetadata[promMulticriterialQuery3]; ok && val != "" {
@@ -229,7 +336,7 @@ func (s *prometheusMulticriterialRalScaler) Close(context.Context) error {
 func (s *prometheusMulticriterialRalScaler) GetMetricSpecForScaling(context.Context) []v2.MetricSpec {
 	metricName := kedautil.NormalizeString(fmt.Sprintf("prometheus-multicriterial-ral-%s", s.metadata.metricName))
 
-	totalThreshold := 1.0 // desiredMetricValue
+	totalThreshold := 1.0 // desiredMetricValue to neutrilze parameter
 
 	externalMetric := &v2.ExternalMetricSource{
 		Metric: v2.MetricIdentifier{
@@ -495,6 +602,7 @@ func (s *prometheusMulticriterialRalScaler) ExecutePromQuery3(ctx context.Contex
 	return v, nil
 }
 
+// TODO
 func (s *prometheusMulticriterialRalScaler) ExecutePromQuery4(ctx context.Context) (float64, error) {
 	t := time.Now().UTC().Format(time.RFC3339)
 
@@ -608,35 +716,109 @@ func (s *prometheusMulticriterialRalScaler) GetMetrics(ctx context.Context, metr
 		return []external_metrics.ExternalMetricValue{}, err4
 	}
 
-	// scaledObject := &kedav1alpha1.ScaledObject{}
+	SetProfilesWithNormalizedParams(s.metadata.reservationLevel1, s.metadata.reservationLevel2, s.metadata.reservationLevel3, s.metadata.aspirationLevel1, s.metadata.aspirationLevel2, s.metadata.aspirationLevel3)
 
-	currentReplicas := (val1 + val2 + val3) / val4
+	// currentReplicas := (val1 + val2 + val3) / val4
+	currentReplicas := CalculateDesiredReplicasbyRALAlgorithm(val1, val2, val3) / int(val4)
 
-	if currentReplicas < 1.0 {
-		currentReplicas = defaultHPAMinReplicas
-	} else if currentReplicas > 4.0 {
-		currentReplicas = defaultHPAMaxReplicas
-	}
-
-	// lastReplicasCount = currentReplicas
-	// fullQuery := strconv.Itoa(int(currentReplicas))
-
-	metric := GenerateMetricInMili(metricName, currentReplicas)
+	metric := GenerateMetricInMili(metricName, float64(currentReplicas))
 
 	return append([]external_metrics.ExternalMetricValue{}, metric), nil
 }
 
-// func getHPAMinReplicas(scaledObject *kedav1alpha1.ScaledObject) *int32 {
-// 	if scaledObject.Spec.MinReplicaCount != nil && *scaledObject.Spec.MinReplicaCount > 0 {
-// 		return scaledObject.Spec.MinReplicaCount
-// 	}
-// 	tmp := defaultHPAMinReplicas
-// 	return &tmp
-// }
+func CalculateDesiredReplicasbyRALAlgorithm(curentCPUVal float64, curentRAMVal float64, curentLATVal float64) (numberOfReplicas int) {
+	// normalize params
+	curentCPUNorm := NormalizeCPU(curentCPUVal)
+	curentRAMNorm := NormalizeRAM(curentRAMVal)
+	curentLATNorm := NormalizeLAT(curentLATVal)
 
-// func getHPAMaxReplicas(scaledObject *kedav1alpha1.ScaledObject) int32 {
-// 	if scaledObject.Spec.MaxReplicaCount != nil {
-// 		return *scaledObject.Spec.MaxReplicaCount
-// 	}
-// 	return defaultHPAMaxReplicas
-// }
+	ReplicasProfiles := [8]ReplicasProfile{rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8}
+
+	var tmp_prefer_min = []float64{}
+	var prefer_max = make(map[int]float64)
+
+	// findPreferMaxMap
+	for _, val := range ReplicasProfiles {
+		tmp_CPU := (val.CPUReservation - curentCPUNorm) / (val.CPUReservation - val.CPUAspiration)
+		tmp_RAM := (val.RAMReservation - curentRAMNorm) / (val.RAMReservation - val.RAMAspiration)
+		tmp_latency := (val.LATReservation - curentLATNorm) / (val.LATReservation - val.LATAspiration)
+
+		// check if feasible
+		if tmp_CPU >= 0 && tmp_RAM >= 0 && tmp_latency >= 0 {
+			tmp_prefer_min = append(tmp_prefer_min, tmp_CPU, tmp_RAM, tmp_latency)
+		}
+
+		if len(tmp_prefer_min) > 0 {
+			sort.Slice(tmp_prefer_min, func(i, j int) bool {
+				return tmp_prefer_min[i] < tmp_prefer_min[j]
+			})
+
+			prefer_max[val.replicasNum] = tmp_prefer_min[0]
+
+			tmp_prefer_min = nil
+		}
+	}
+
+	// getReplicasNum
+	keys := make([]int, 0, len(prefer_max))
+	for key := range prefer_max {
+		keys = append(keys, key)
+	}
+
+	sort.SliceStable(keys, func(i, j int) bool {
+		return prefer_max[keys[i]] < prefer_max[keys[j]]
+	})
+
+	newReplicasNum = keys[0]
+
+	return newReplicasNum
+}
+
+func SetProfilesWithNormalizedParams(CPUReservationPerPodVal float64, RAMReservationPerPodVal float64, LATReservationPerPodVal float64, CPUAspirationPerPodVal float64, RAMAspirationPerPodVal float64, LATAspirationPerPodVal float64) {
+	CPUReservationPerPodNorm := NormalizeCPU(CPUReservationPerPodVal)
+	RAMReservationPerPodNorm := NormalizeRAM(RAMReservationPerPodVal)
+	LATReservationPerPodNorm := NormalizeLAT(LATReservationPerPodVal)
+	CPUAspirationPerPodNorm := NormalizeCPU(CPUAspirationPerPodVal)
+	RAMAspirationPerPodNorm := NormalizeRAM(RAMAspirationPerPodVal)
+	LATAspirationPerPodNorm := NormalizeLAT(LATAspirationPerPodVal)
+
+	// set replicas profiles R and A levels
+	SetProfilesParams(&rp1, 1, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp2, 2, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp3, 3, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp4, 4, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp5, 5, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp6, 6, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp7, 7, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp8, 8, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+}
+
+func SetProfilesParams(rp *ReplicasProfile, rpN int, CPURsv float64, RAMRsv float64, LATRsv float64, CPUAsp float64, RAMAsp float64, LATAsp float64) {
+	rp.replicasNum = rpN
+
+	rp.CPUReservation = CPURsv * float64(rpN)
+	rp.RAMReservation = RAMRsv * float64(rpN)
+	rp.LATReservation = LATRsv * float64(rpN)
+
+	rp.CPUAspiration = CPUAsp * float64(rpN)
+	rp.RAMAspiration = RAMAsp * float64(rpN)
+	rp.LATAspiration = LATAsp * float64(rpN)
+}
+
+func NormalizeCPU(CPU float64) float64 {
+	normalizedCPU := CPU / maxCPUPerPod
+
+	return normalizedCPU
+}
+
+func NormalizeRAM(RAM float64) float64 {
+	normalizedRAM := RAM / maxRAMPerPod
+
+	return normalizedRAM
+}
+
+func NormalizeLAT(LAT float64) float64 {
+	normalizedLAT := LAT / maxLATPerPod
+
+	return normalizedLAT
+}
