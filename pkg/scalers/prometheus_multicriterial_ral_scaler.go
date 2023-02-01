@@ -63,14 +63,16 @@ var (
 	RAMAspirationPerPod  = 100.0
 	LATAspirationPerPod  = 3.0
 
-	rp1 ReplicasProfile
-	rp2 ReplicasProfile
-	rp3 ReplicasProfile
-	rp4 ReplicasProfile
-	rp5 ReplicasProfile
-	rp6 ReplicasProfile
-	rp7 ReplicasProfile
-	rp8 ReplicasProfile
+	rp1  ReplicasProfile
+	rp2  ReplicasProfile
+	rp3  ReplicasProfile
+	rp4  ReplicasProfile
+	rp5  ReplicasProfile
+	rp6  ReplicasProfile
+	rp7  ReplicasProfile
+	rp8  ReplicasProfile
+	rp9  ReplicasProfile
+	rp10 ReplicasProfile
 
 	newReplicasNum int
 )
@@ -691,28 +693,28 @@ func (s *prometheusMulticriterialRalScaler) GetMetrics(ctx context.Context, metr
 	val1, err1 := s.ExecutePromQuery1(ctx)
 
 	if err1 != nil {
-		s.logger.Error(err1, "error executing prometheus multicriterial ral query")
+		s.logger.Error(err1, "error executing prometheus multicriterial ral query1")
 		return []external_metrics.ExternalMetricValue{}, err1
 	}
 
 	val2, err2 := s.ExecutePromQuery2(ctx)
 
 	if err2 != nil {
-		s.logger.Error(err2, "error executing prometheus multicriterial ral query")
+		s.logger.Error(err2, "error executing prometheus multicriterial ral query2")
 		return []external_metrics.ExternalMetricValue{}, err2
 	}
 
 	val3, err3 := s.ExecutePromQuery3(ctx)
 
 	if err3 != nil {
-		s.logger.Error(err3, "error executing prometheus multicriterial ral query")
+		s.logger.Error(err3, "error executing prometheus multicriterial ral query3")
 		return []external_metrics.ExternalMetricValue{}, err3
 	}
 
 	val4, err4 := s.ExecutePromQuery4(ctx)
 
 	if err4 != nil {
-		s.logger.Error(err4, "error executing prometheus multicriterial ral query")
+		s.logger.Error(err4, "error executing prometheus multicriterial ral query4")
 		return []external_metrics.ExternalMetricValue{}, err4
 	}
 
@@ -732,7 +734,7 @@ func CalculateDesiredReplicasbyRALAlgorithm(curentCPUVal float64, curentRAMVal f
 	curentRAMNorm := NormalizeRAM(curentRAMVal)
 	curentLATNorm := NormalizeLAT(curentLATVal)
 
-	ReplicasProfiles := [8]ReplicasProfile{rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8}
+	ReplicasProfiles := [10]ReplicasProfile{rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8, rp9, rp10}
 
 	var tmp_prefer_min = []float64{}
 	var prefer_max = make(map[int]float64)
@@ -760,16 +762,22 @@ func CalculateDesiredReplicasbyRALAlgorithm(curentCPUVal float64, curentRAMVal f
 	}
 
 	// getReplicasNum
-	keys := make([]int, 0, len(prefer_max))
-	for key := range prefer_max {
-		keys = append(keys, key)
+	if len(prefer_max) > 0 {
+		fmt.Printf("Prefer MAX Map: %v\n\n", prefer_max)
+
+		keys := make([]int, 0, len(prefer_max))
+		for key := range prefer_max {
+			keys = append(keys, key)
+		}
+
+		sort.SliceStable(keys, func(i, j int) bool {
+			return prefer_max[keys[i]] < prefer_max[keys[j]]
+		})
+
+		newReplicasNum = keys[0]
+	} else {
+		newReplicasNum = len(ReplicasProfiles)
 	}
-
-	sort.SliceStable(keys, func(i, j int) bool {
-		return prefer_max[keys[i]] < prefer_max[keys[j]]
-	})
-
-	newReplicasNum = keys[0]
 
 	return newReplicasNum
 }
@@ -791,6 +799,8 @@ func SetProfilesWithNormalizedParams(CPUReservationPerPodVal float64, RAMReserva
 	SetProfilesParams(&rp6, 6, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
 	SetProfilesParams(&rp7, 7, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
 	SetProfilesParams(&rp8, 8, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp9, 9, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
+	SetProfilesParams(&rp10, 10, CPUReservationPerPodNorm, RAMReservationPerPodNorm, LATReservationPerPodNorm, CPUAspirationPerPodNorm, RAMAspirationPerPodNorm, LATAspirationPerPodNorm)
 }
 
 func SetProfilesParams(rp *ReplicasProfile, rpN int, CPURsv float64, RAMRsv float64, LATRsv float64, CPUAsp float64, RAMAsp float64, LATAsp float64) {
